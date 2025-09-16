@@ -20,4 +20,15 @@ class BibliographicRecordForm(forms.ModelForm):
         instance = super().save(commit)
         #Autores
         authors_text = self.cleaned_data.get("authors", "")
+        if commit:
+            if authors_text:
+                name = [x.strip() for x in authors_text.split(";") if x.strip()]
+                for n in names:
+                    p, _ = Person.objects.get_or_create(full_name=n)
+                    instance.contributors.get_or_create(person=p)
+                    
+            #Materias
+            subject_text = self.cleaned_data.get("subjects_input","")
+            if subjects_text:
+                terms = 
         
