@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'create' %}Nuevo{% else %}Editar{% endif %} registro{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{% if mode == 'create' %}Nuevo{% else %}Editar{% endif %} registro</h1>
+<form method="post" enctype="multipart/form-data" class="row g-3">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    <div class="col-md-6">
+      <label class="form-label">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+      {{ field|add_class:"form-control" }}
+      {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+      {% for e in field.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}
+    </div>
+  {% endfor %}
+  <div class="col-12 d-flex gap-2">
+    <button class="btn btn-primary" type="submit">Guardar</button>
+    <a class="btn btn-secondary" href="{% url 'catalog:record_list' %}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

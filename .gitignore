@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Virtualenvs
+/env-biblio/
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+db.sqlite3   # si usas sqlite local
+
+# Django (opcional)
+staticfiles/
+media/

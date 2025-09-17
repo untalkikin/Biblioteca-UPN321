@@ -1,0 +1,4 @@
+[
+  {"model":"catalog.location","pk":1,"fields":{"code":"UPN321-EST1","name":"Estantería 1"}},
+  {"model":"catalog.publisher","pk":1,"fields":{"name":"UPN Editorial","place":"Zacatecas"}}
+]

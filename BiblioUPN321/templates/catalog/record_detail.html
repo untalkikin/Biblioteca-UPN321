@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ record.title }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h1 class="h4">{{ record.title }}</h1>
+  {% if user.is_authenticated %}
+  <a class="btn btn-outline-primary" href="{% url 'catalog:record_update' pk=record.pk %}">Editar</a>
+  {% endif %}
+</div>
+<div class="row g-3">
+  <div class="col-md-3">
+    {% if record.cover %}
+      <img src="{{ record.cover.url }}" class="img-fluid rounded" alt="Portada">
+    {% else %}
+      <div class="border rounded p-3 text-muted text-center">Sin portada</div>
+    {% endif %}
+  </div>
+  <div class="col-md-9">
+    <dl class="row">
+      <dt class="col-sm-3">Signatura LCC</dt><dd class="col-sm-9">{{ record.call_number }}</dd>
+      <dt class="col-sm-3">Autores</dt>
+      <dd class="col-sm-9">
+        {% for c in record.contributors.all %}{{ c.person.full_name }} ({{ c.get_role_display }}){% if not forloop.last %}; {% endif %}{% empty %}—{% endfor %}
+      </dd>
+      <dt class="col-sm-3">Editorial</dt><dd class="col-sm-9">{{ record.publisher }}{% if record.publish_year %} ({{ record.publish_year }}){% endif %}</dd>
+      <dt class="col-sm-3">ISBN</dt><dd class="col-sm-9">{{ record.isbn|default:"—" }}</dd>
+      <dt class="col-sm-3">Notas</dt><dd class="col-sm-9">{{ record.notes|default:"—" }}</dd>
+      <dt class="col-sm-3">Materias</dt>
+      <dd class="col-sm-9">{% for s in record.subjects.all %}<span class="badge bg-secondary">{{ s.term }}</span> {% empty %}—{% endfor %}</dd>
+    </dl>
+    <h5 class="mt-4">Ejemplares</h5>
+    <ul class="list-group">
+      {% for it in record.items.all %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          {{ it.barcode }} · {{ it.location.name }}
+          <span class="badge bg-{{ it.status|yesno:'success,danger,warning,secondary' }}">{{ it.get_status_display }}</span>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-muted">Sin ejemplares</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

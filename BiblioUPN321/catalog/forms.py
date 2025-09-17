@@ -30,5 +30,8 @@ class BibliographicRecordForm(forms.ModelForm):
             #Materias
             subject_text = self.cleaned_data.get("subjects_input","")
             if subjects_text:
-                terms = 
-        
+                terms = [x.strip() for x in subjects_text.split(";") if x.strip()]
+                for t in terms:
+                    s, _ = Subject.objects.get_or_create(term=t)
+                    instance.subjects.add(s)
+        return instance        
