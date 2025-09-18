@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load widget_tweaks %}
 {% block title %}{% if mode == 'create' %}Nuevo{% else %}Editar{% endif %} registro{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">{% if mode == 'create' %}Nuevo{% else %}Editar{% endif %} registro</h1>
