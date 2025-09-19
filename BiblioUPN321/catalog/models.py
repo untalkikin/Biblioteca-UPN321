@@ -176,3 +176,24 @@ class Item(TimeStampedModel):
         return f"{self.barcode} - {self.record.title}"
 
 
+class Book(models.Model):
+    title = models.CharField(max_length=512)
+    authors = models.CharField(
+        max_length=512,
+        help_text="Formato sugerido: 'Apellido, Nombre; Apellido2, Nombre2'"
+    )
+    pub_year = models.PositiveIntegerField(null=True, blank=True)
+    subjects_input = models.TextField(
+        blank=True,
+        help_text="Temas separados por ';' (ej. 'Educación; Metodología de la investigación')"
+    )
+
+    cutter1 = models.CharField(max_length=16, blank=True)
+    cutter2 = models.CharField(max_length=16, blank=True)
+    call_lcc = models.CharField(max_length=64, blank=True, unique=False)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title

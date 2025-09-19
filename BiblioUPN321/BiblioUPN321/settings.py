@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # App local principal que contiene el catálogo de la biblioteca
-    'catalog',
+    'catalog.apps.CatalogConfig',
     'widget_tweaks',
 ]
 

@@ -27,6 +27,7 @@ urlpatterns = [
     # 🔐 URLs de autenticación (login, logout, password reset, etc.)
     path('accounts/', include('django.contrib.auth.urls')),
     path('accounts/login/',auth_views.LoginView.as_view(redirect_authenticated_user=True), name='login'),
+    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
 
     # 📚 Catálogo
     path('catalog/', include('catalog.urls', namespace='catalog')),
