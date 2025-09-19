@@ -1,0 +1,6 @@
+/* Estilos de la aplicación (añadidos para el login) */
+.login-logo{
+  max-width: 250px;
+  height: auto;
+  display: inline-block;
+}
