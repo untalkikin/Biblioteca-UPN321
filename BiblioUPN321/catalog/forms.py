@@ -1,5 +1,6 @@
 from django import forms   
 from .models import BibliographicRecord, Item, Person, Subject
+import re
 
 
 class BibliographicRecordForm(forms.ModelForm):
@@ -69,3 +70,9 @@ class BibliographicRecordForm(forms.ModelForm):
                     s, _ = Subject.objects.get_or_create(term=t)
                     instance.subjects.add(s)
         return instance
+    
+        def clean_lcc_code(self):
+            code = self.cleaned_data.get("lcc_code")
+            if code and not re.match(LCC_REGEX, code.strip().upper()):
+                raise forms.ValidationError("Formato LCC inválido.")
+            return code

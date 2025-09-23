@@ -2,7 +2,9 @@ from django.db import models
 from django.core.validators import RegexValidator 
 from django.utils.translation import gettext_lazy as _
 
+from .services.lcc import generate_lcc, normalize_lcc, split_lcc, build_call_number
 
+LCC_REGEX = r"^[A-Z]{1,3}\s?\d{1,4}(\.\d+)?(\s?[A-Z]\d+)?(\s?\.\w+)?(\s?\d{4})?$"
 # Modelo base abstracto para proveer marcas de tiempo comunes a todos
 # los registros (creado/actualizado). Útil para auditoría y ordenamientos.
 class TimeStampedModel(models.Model):
@@ -94,10 +96,29 @@ class BibliographicRecord(TimeStampedModel):
     publish_year = models.PositiveIntegerField(null=True, blank=True)
     publisher = models.ForeignKey(Publisher, null=True, blank=True, on_delete=models.SET_NULL)
     publish_place = models.CharField(max_length=255, blank=True)
-    isbn = models.CharField(max_length=32, blank=True)
-    issn = models.CharField(max_length=32, blank=True)
-    iccn = models.CharField(max_length=32, blank=True)
-    
+    lcc_code = models.CharField(
+        "Clasificación LCC",
+        max_length=32,
+        blank=True,
+        null=True,
+        db_index=True,
+        validators=[RegexValidator(
+            regex=LCC_REGEX,
+            message="Formato LCC inválido (ej. 'QA76.73 .P98 2023')."
+        )],
+        help_text="Código de la Clasificación de la Library of Congress."
+    )
+
+    # Opcional: conservar la “razón” o pista de cómo se generó
+    lcc_source = models.CharField(
+        max_length=64, blank=True, null=True,
+        help_text="Origen: heurística, asignación manual, importación, etc."
+    )
+
+    isbn = models.CharField(max_length=32, blank=True, null=True)
+    issn = models.CharField(max_length=32, blank=True, null=True)
+    iccn = models.CharField(max_length=32, blank=True, null=True)
+
     # Signatura LCC completa: usada para localización y clasificación.
     call_number = models.CharField(
         max_length=128, blank=True,
@@ -125,6 +146,42 @@ class BibliographicRecord(TimeStampedModel):
         
     def __str__(self):
         return self.title
+    
+    
+def save(self, *args, **kwargs):
+    # 1) Generar / normalizar LCC
+    if not self.lcc_code:
+        generated, source = generate_lcc(self)
+        if generated:
+            self.lcc_code = normalize_lcc(generated)
+            self.lcc_source = source or "heurística"
+    else:
+        self.lcc_code = normalize_lcc(self.lcc_code)
+
+    # 2) Desglosar y poblar campos derivados
+    if self.lcc_code:
+        parts = split_lcc(self.lcc_code)
+        self.lcc_class = parts["lcc_class"]
+        self.lcc_number = parts["lcc_number"]
+        # Solo actualiza cutter/cutter2 si están vacíos (permite corrección manual)
+        self.cutter = self.cutter or parts["cutter"]
+        self.cutter2 = self.cutter2 or parts["cutter2"]
+        # Si no tiene publish_year pero el LCC lo trae, úsalo
+        if not self.publish_year and parts["year"]:
+            try:
+                self.publish_year = int(parts["year"])
+            except ValueError:
+                pass
+        # 3) Call number
+        self.call_number = build_call_number({
+            "lcc_class": self.lcc_class,
+            "lcc_number": self.lcc_number,
+            "cutter": self.cutter,
+            "cutter2": self.cutter2,
+            "year": (self.publish_year and str(self.publish_year)) or parts["year"]
+        })
+
+    super().save(*args, **kwargs)
     
 
 class RecordContributor(models.Model):
