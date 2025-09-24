@@ -148,40 +148,59 @@ class BibliographicRecord(TimeStampedModel):
         return self.title
     
     
-def save(self, *args, **kwargs):
-    # 1) Generar / normalizar LCC
-    if not self.lcc_code:
-        generated, source = generate_lcc(self)
-        if generated:
-            self.lcc_code = normalize_lcc(generated)
-            self.lcc_source = source or "heurística"
-    else:
-        self.lcc_code = normalize_lcc(self.lcc_code)
-
-    # 2) Desglosar y poblar campos derivados
-    if self.lcc_code:
-        parts = split_lcc(self.lcc_code)
-        self.lcc_class = parts["lcc_class"]
-        self.lcc_number = parts["lcc_number"]
-        # Solo actualiza cutter/cutter2 si están vacíos (permite corrección manual)
-        self.cutter = self.cutter or parts["cutter"]
-        self.cutter2 = self.cutter2 or parts["cutter2"]
-        # Si no tiene publish_year pero el LCC lo trae, úsalo
-        if not self.publish_year and parts["year"]:
+  # catalog/models.py (dentro de class BibliographicRecord)
+    def save(self, *args, **kwargs):
+        # 0) Preparar texto de materias sin tocar M2M si aún no hay pk
+        subjects_text = getattr(self, "_subjects_text", None)
+        if subjects_text is None and self.pk:
             try:
-                self.publish_year = int(parts["year"])
-            except ValueError:
-                pass
-        # 3) Call number
-        self.call_number = build_call_number({
-            "lcc_class": self.lcc_class,
-            "lcc_number": self.lcc_number,
-            "cutter": self.cutter,
-            "cutter2": self.cutter2,
-            "year": (self.publish_year and str(self.publish_year)) or parts["year"]
-        })
+                subjects_text = " ".join(self.subjects.values_list("name", flat=True))
+            except Exception:
+                subjects_text = ""
 
-    super().save(*args, **kwargs)
+        # 1) Generar / normalizar LCC
+        if not self.lcc_code:
+            generated, source = generate_lcc(self, subjects_text=subjects_text)
+            if generated:
+                self.lcc_code = normalize_lcc(generated)
+                self.lcc_source = source or "heurística"
+        else:
+            self.lcc_code = normalize_lcc(self.lcc_code)
+
+        # 2) Derivados (split, call number, sort keys) — sin tocar M2M
+        if self.lcc_code:
+            parts = split_lcc(self.lcc_code)
+            self.lcc_class = parts["lcc_class"]
+            self.lcc_number = parts["lcc_number"]
+            self.cutter = self.cutter or parts["cutter"]
+            self.cutter2 = self.cutter2 or parts["cutter2"]
+
+            if not self.publish_year and parts["year"]:
+                try:
+                    self.publish_year = int(parts["year"])
+                except (TypeError, ValueError):
+                    pass
+
+            self.call_number = build_call_number({
+                "lcc_class": self.lcc_class,
+                "lcc_number": self.lcc_number,
+                "cutter": self.cutter,
+                "cutter2": self.cutter2,
+                "year": (self.publish_year and str(self.publish_year)) or parts["year"]
+            })
+
+            sort_key, number_sort = build_sort_key(
+                lcc_class=self.lcc_class,
+                lcc_number=self.lcc_number,
+                cutter=self.cutter,
+                cutter2=self.cutter2,
+                year=(self.publish_year and str(self.publish_year)) or parts["year"]
+            )
+            self.lcc_sort_key = sort_key
+            self.lcc_number_sort = number_sort
+
+        super().save(*args, **kwargs)
+
     
 
 class RecordContributor(models.Model):
