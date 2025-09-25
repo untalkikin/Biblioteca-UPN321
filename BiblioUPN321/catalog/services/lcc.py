@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 # ------------------ Configuración / Heurísticas ------------------
 KEYWORDS_TO_CLASS = {
-    # Educación y pedagogía (UPN ♥)
+    # Educación y pedagogía
     "educación": "L",
     "pedagogía": "LB",
     "didáctica": "LB",
@@ -13,17 +13,30 @@ KEYWORDS_TO_CLASS = {
     "metodología de la investigación": "LB",
     "evaluación educativa": "LB",
     "psicopedagogía": "LB",
+
     # Ciencias sociales / psicología
     "psicología": "BF",
     "sociología": "HM",
     "antropología": "GN",
+
     # Computación / matemáticas
     "programación": "QA",
     "computación": "QA",
     "algoritmos": "QA",
     "matemáticas": "QA",
     "estadística": "QA",
-    # Historia / literatura (ejemplos)
+
+    # Lengua y literatura / lingüística (¡clave para tu caso!)
+    "gramática": "PC",          # Lenguas románicas (español = PC)
+    "gramatical": "PC",
+    "lingüística": "P",
+    "filología": "P",
+    "español": "PC",
+    "castellano": "PC",
+    "real academia española": "PC",
+    "rae": "PC",
+
+    # Historia / literatura (ya tenías)
     "historia": "D",
     "literatura": "P",
 }
@@ -50,16 +63,13 @@ def normalize_lcc(code: Optional[str]) -> Optional[str]:
 
 
 # ------------------ Helpers de clasificación ------------------
+# --- Asegúrate de que esta función devuelva 'Z' si no encuentra nada ---
 def _class_letters_from_subjects(text: Optional[str]) -> str:
-    """
-    Dado un texto de materias/tema, devuelve letras LCC (p.ej., 'LB', 'QA').
-    """
     text = (text or "").lower()
     for kw, clazz in KEYWORDS_TO_CLASS.items():
         if kw in text:
             return clazz
-    return ""
-
+    return "Z"  # <--- Fallback: genera algo aunque no haya match
 
 def _class_number_from_title(title: Optional[str]) -> str:
     """
@@ -152,15 +162,9 @@ def infer_class(record) -> Optional[str]:
 
 # ------------------ API principal ------------------
 def generate_lcc(record, subjects_text: Optional[str] = None) -> Tuple[Optional[str], str]:
-    """
-    Devuelve (lcc_sugerida, source). NO toca M2M.
-    - Usa subjects_text si viene del formulario (commit=False -> save_m2m()).
-    - Si no, intenta inferir por otros campos del record (sin M2M en primer save).
-    """
-    # 1) Letras (clase)
     letters = _class_letters_from_subjects(subjects_text)
-    if not letters:
-        # Construye un texto con campos seguros (sin M2M)
+
+    if not letters or letters.strip() == "":
         safe_text = " ".join([
             getattr(record, "series", "") or "",
             getattr(record, "publish_place", "") or "",
@@ -168,37 +172,27 @@ def generate_lcc(record, subjects_text: Optional[str] = None) -> Tuple[Optional[
             getattr(record, "title", "") or "",
             getattr(record, "subtitle", "") or "",
         ])
-        letters = _class_letters_from_subjects(safe_text)
+        letters = _class_letters_from_subjects(safe_text) or "Z"   # <--- asegura fallback
 
-    if not letters:
-        # Último intento: usa infer_class (ya segura)
-        letters = infer_class(record) or ""
-
-    # 2) Número principal (100..999)
     number = _class_number_from_title(getattr(record, "title", None))
 
-    # 3) Cutter primario: autor si hay, si no título/publisher
     cutter1 = first_author_cutter(record)
     if not cutter1 and getattr(record, "publisher", None):
         pub_name = getattr(record.publisher, "name", None) or str(record.publisher)
         cutter1 = cutter_from_person_name(pub_name)
     if not cutter1:
-        cutter1 = _author_cutter(getattr(record, "title", None))  # fallback suave
+        cutter1 = _author_cutter(getattr(record, "title", None))
 
-    # 4) Año
     year = getattr(record, "publish_year", None)
 
-    if not letters or not number:
-        return None, "insuficiente"
-
-    # Ensambla código (sin puntos; se añaden al render)
+    # Ya no devolvemos None: siempre habrá letters y number
     parts = [f"{letters} {number}"]
     if cutter1:
         parts.append(f"{cutter1}")
     if year:
         parts.append(str(year))
-
     return " ".join(parts), "heurística"
+
 
 
 def split_lcc(code: str):
@@ -247,32 +241,32 @@ def build_sort_key(
     cutter: str,
     cutter2: str,
     year: Optional[str]
-) -> Tuple[str, str]:
-    """
-    Devuelve (sort_key, number_sort) para ordenar correctamente por estantería:
-     - sort_key: CLASE(3) | INT(4) | DEC(6) | C1(L+4) | C2(L+4) | AÑO(4)
-     - number_sort: INT.DEC (útil para depurar)
-    """
-    # separa entero y decimal del número
-    m = re.match(r"^(\d{1,4})(?:\.(\d+))?$", (lcc_number or "").strip())
-    if m:
-        n_int = m.group(1).zfill(4)
-        n_dec = (m.group(2) or "").ljust(6, "0")
-    else:
-        n_int, n_dec = "0000", "000000"
+    ) -> Tuple[str, str]:
+        """
+        Devuelve (sort_key, number_sort) para ordenar correctamente por estantería:
+        - sort_key: CLASE(3) | INT(4) | DEC(6) | C1(L+4) | C2(L+4) | AÑO(4)
+        - number_sort: INT.DEC (útil para depurar)
+        """
+        # separa entero y decimal del número
+        m = re.match(r"^(\d{1,4})(?:\.(\d+))?$", (lcc_number or "").strip())
+        if m:
+            n_int = m.group(1).zfill(4)
+            n_dec = (m.group(2) or "").ljust(6, "0")
+        else:
+            n_int, n_dec = "0000", "000000"
 
-    def _pack(c: str) -> str:
-        if not c:
-            return "_0000"
-        m2 = re.match(r"^([A-Z])(\d+)$", c.upper())
-        if not m2:
-            return "_0000"
-        return f"{m2.group(1)}{m2.group(2).zfill(4)}"
+        def _pack(c: str) -> str:
+            if not c:
+                return "_0000"
+            m2 = re.match(r"^([A-Z])(\d+)$", c.upper())
+            if not m2:
+                return "_0000"
+            return f"{m2.group(1)}{m2.group(2).zfill(4)}"
 
-    c1 = _pack(cutter or "")
-    c2 = _pack(cutter2 or "")
-    y  = (year or "").zfill(4) if year else "0000"
+        c1 = _pack(cutter or "")
+        c2 = _pack(cutter2 or "")
+        y  = (year or "").zfill(4) if year else "0000"
 
-    sort_key = f"{(lcc_class or '').ljust(3,'_')}|{n_int}|{n_dec}|{c1}|{c2}|{y}"
-    number_sort = f"{n_int}.{n_dec}"
-    return sort_key, number_sort
+        sort_key = f"{(lcc_class or '').ljust(3,'_')}|{n_int}|{n_dec}|{c1}|{c2}|{y}"
+        number_sort = f"{n_int}.{n_dec}"
+        return sort_key, number_sort

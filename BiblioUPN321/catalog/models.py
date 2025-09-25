@@ -2,7 +2,7 @@ from django.db import models
 from django.core.validators import RegexValidator 
 from django.utils.translation import gettext_lazy as _
 
-from .services.lcc import generate_lcc, normalize_lcc, split_lcc, build_call_number
+from .services.lcc import generate_lcc, normalize_lcc, split_lcc, build_call_number, build_sort_key
 
 LCC_REGEX = r"^[A-Z]{1,3}\s?\d{1,4}(\.\d+)?(\s?[A-Z]\d+)?(\s?\.\w+)?(\s?\d{4})?$"
 # Modelo base abstracto para proveer marcas de tiempo comunes a todos
