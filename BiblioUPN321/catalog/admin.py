@@ -30,6 +30,25 @@ class BibliographicRecordAdmin(admin.ModelAdmin):
     readonly_fields = ("lcc_code", "lcc_source", "call_number", "lcc_class", "lcc_number")
     inlines = [RecordContributorInline]
 
+    def save_model(self, request, obj, form, change):
+        """Inject subjects text for first-save LCC generation.
+
+        The admin saves the object before committing M2M relations. For new
+        records we can look at the submitted `subjects` in the form (a
+        queryset) and provide a temporary `_subjects_text` so that
+        `BibliographicRecord.save()` can use it when generating LCC.
+        """
+        if not change and not getattr(obj, 'lcc_code', None):
+            subjects = form.cleaned_data.get('subjects') if form and hasattr(form, 'cleaned_data') else None
+            if subjects:
+                try:
+                    obj._subjects_text = " ".join([s.term for s in subjects])
+                except Exception:
+                    # Tolerante: no bloquear si form data es inesperada
+                    pass
+
+        super().save_model(request, obj, form, change)
+
 # (Opcional, por comodidad)
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):

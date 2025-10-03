@@ -45,30 +45,45 @@ class BibliographicRecordForm(forms.ModelForm):
     def save(self, commit=True):
         """Guarda el registro y crea/actualiza autores y materias opcionales.
 
-        - Si `commit` es True se guardan las relaciones de autores y materias.
-        - Convierte cada autor en una `Person` (si no existe) y crea la
-          relación con el registro.
-        - Convierte cada término de `subjects_input` en `Subject`.
+        Estrategia:
+        - Usamos `commit=False` para obtener la instancia sin PK aún.
+        - Inyectamos `instance._subjects_text` con el texto proporcionado por el
+          formulario para que `BibliographicRecord.save()` pueda usarlo al
+          generar la LCC en el primer guardado.
+        - Guardamos la instancia (commit) y luego creamos las relaciones M2M y
+          de `RecordContributor`.
         """
-        instance = super().save(commit)
+        # Crear instancia sin guardar relaciones M2M todavía
+        instance = super().save(commit=False)
 
-        # Manejo de autores (campo libre transformado en relaciones)
-        authors_text = self.cleaned_data.get("authors", "")
+        # Inyectar texto de subjects para que el save() del modelo lo lea
+        subjects_text = self.cleaned_data.get("subjects_input", "")
+        if subjects_text:
+            # Guardamos en un atributo temporal que el modelo revisa
+            instance._subjects_text = " ".join([x.strip() for x in subjects_text.split(";") if x.strip()])
+
+        # Guardar la instancia para que `save()` del modelo pueda generar LCC
         if commit:
+            instance.save()
+
+            # Manejo de autores (campo libre transformado en relaciones)
+            authors_text = self.cleaned_data.get("authors", "")
             if authors_text:
                 names = [x.strip() for x in authors_text.split(";") if x.strip()]
                 for n in names:
                     p, _ = Person.objects.get_or_create(full_name=n)
                     # Use related_name 'contributors' en RecordContributor
                     instance.contributors.get_or_create(person=p)
-                    
+
             # Manejo de materias (Subjects)
-            subjects_text = self.cleaned_data.get("subjects_input", "")
             if subjects_text:
                 terms = [x.strip() for x in subjects_text.split(";") if x.strip()]
                 for t in terms:
                     s, _ = Subject.objects.get_or_create(term=t)
                     instance.subjects.add(s)
+
+            return instance
+
         return instance
     
         def clean_lcc_code(self):

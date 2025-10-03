@@ -152,9 +152,12 @@ class BibliographicRecord(TimeStampedModel):
     def save(self, *args, **kwargs):
         # 0) Preparar texto de materias sin tocar M2M si aún no hay pk
         subjects_text = getattr(self, "_subjects_text", None)
+        # Si el formulario/loader inyecta un texto de materias lo usamos.
+        # Si no, y ya existe pk, leemos las materias desde el M2M (campo 'term').
         if subjects_text is None and self.pk:
             try:
-                subjects_text = " ".join(self.subjects.values_list("name", flat=True))
+                # El modelo Subject define el campo como `term`.
+                subjects_text = " ".join(self.subjects.values_list("term", flat=True))
             except Exception:
                 subjects_text = ""
 

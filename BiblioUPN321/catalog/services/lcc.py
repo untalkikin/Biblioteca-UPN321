@@ -233,13 +233,43 @@ def normalize_text(text: Optional[str]) -> str:
     """Compat: conserva la antigua API."""
     return normalize(text or "", mode="text") or ""
 
+
+# Stopwords pequeñas para mejorar matching por tokens (evitar que 'de','la' rompan emparejamientos)
+_STOPWORDS: Set[str] = {"de", "la", "el", "los", "las", "y", "en", "del", "para", "con", "por", "a"}
+
+
+# Normaliza las claves de KEYWORDS_TO_CLASS para búsquedas insensibles a tildes/variantes
+# Construimos esto aquí, tras definir normalize_text
+NORMALIZED_KEYWORDS: Dict[str, str] = {normalize_text(k): v for k, v in KEYWORDS_TO_CLASS.items()}
+
 # ------------------ Helpers de clasificación ------------------
 def _class_letters_from_subjects(text: Optional[str]) -> str:
     """Devuelve la clase (letras) a partir de keywords; fallback Z si no hay match."""
-    text = (text or "").lower()
-    for kw, clazz in KEYWORDS_TO_CLASS.items():
-        if kw in text:
+    # Normalizamos texto (quita tildes, lower, colapsa espacios) para matching robusto
+    text_norm = normalize_text(text or "")
+
+    # 1) Intento de coincidencia directa sobre las claves normalizadas
+    for kw_norm, clazz in NORMALIZED_KEYWORDS.items():
+        if kw_norm and kw_norm in text_norm:
             return clazz
+
+    # 2) Fallback por tokens: las palabras principales del keyword deben estar
+    # contenidas en el texto (ignorando stopwords). Esto permite que
+    # "metodologia de la investigacion" coincida con
+    # "metodologia de la investigacion educativa" si falta el sufijo.
+    text_tokens = set(w for w in text_norm.split() if w and w not in _STOPWORDS)
+    if text_tokens:
+        for kw_norm, clazz in NORMALIZED_KEYWORDS.items():
+            kw_tokens = set(w for w in kw_norm.split() if w and w not in _STOPWORDS)
+            if not kw_tokens:
+                continue
+            # Requiere que la intersección cubra la mayor parte de tokens de la keyword.
+            inter = kw_tokens.intersection(text_tokens)
+            # si la keyword tiene 1 token, basta uno; si tiene >1, permitimos faltar 1 token como tolerancia
+            needed = max(1, len(kw_tokens) - 1)
+            if len(inter) >= needed:
+                return clazz
+
     return "Z"  # Fallback: al menos algo válido
 
 def _class_number_from_title(title: Optional[str]) -> str:
@@ -319,10 +349,25 @@ def infer_class(record) -> Optional[str]:
     except Exception:
         pass
 
-    text = " ".join(bits).lower()
-    for kw, clazz in KEYWORDS_TO_CLASS.items():
-        if kw in text:
+    # Normalizamos todo el texto para evitar fallos por tildes/ mayúsculas
+    text = " ".join(bits)
+    text = normalize_text(text)
+
+    # Intenta coincidencia directa y luego por tokens usando el mapa normalizado
+    for kw_norm, clazz in NORMALIZED_KEYWORDS.items():
+        if kw_norm and kw_norm in text:
             return clazz
+
+    text_tokens = set(w for w in text.split() if w and w not in _STOPWORDS)
+    if text_tokens:
+        for kw_norm, clazz in NORMALIZED_KEYWORDS.items():
+            kw_tokens = set(w for w in kw_norm.split() if w and w not in _STOPWORDS)
+            if not kw_tokens:
+                continue
+            inter = kw_tokens.intersection(text_tokens)
+            needed = max(1, len(kw_tokens) - 1)
+            if len(inter) >= needed:
+                return clazz
     return None
 
 # ------------------ API principal ------------------

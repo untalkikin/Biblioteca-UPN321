@@ -64,4 +64,10 @@ class Command(BaseCommand):
                     subj, _ = Subject.objects.get_or_create(term=s)
                     rec.subjects.add(subj)
 
+                # Si el importador creó/actualizó materias y el registro no
+                # tiene lcc_code, volver a guardar para que la heurística
+                # pueda usar las subjects y generar la LCC.
+                if not rec.lcc_code:
+                    rec.save()
+
                 self.stdout.write(self.style.SUCCESS(f"{'Creado' if created else 'Actualizado'}: {rec.title}"))
