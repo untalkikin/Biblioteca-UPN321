@@ -153,3 +153,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # ---------------------------------------------------------
 # Tipo de campo por defecto para claves primarias en modelos.
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Media (archivos subidos por usuarios, imágenes de portadas y QRs)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'

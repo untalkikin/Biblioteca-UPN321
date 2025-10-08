@@ -56,7 +56,24 @@ def record_detail(request, pk):
     relación con la editorial.
     """
     record = get_object_or_404(BibliographicRecord.objects.select_related("publisher"), pk=pk)
-    return render(request, "catalog/record_detail.html", {"record": record})
+
+    # Calcular resúmenes de existencias para mostrar en la plantilla.
+    items_qs = record.items.all()
+    total_items = items_qs.count()
+    available_count = items_qs.filter(status=Item.Status.AVAILABLE).count()
+    loaned_count = items_qs.filter(status=Item.Status.LOANED).count()
+    repair_count = items_qs.filter(status=Item.Status.REPAIR).count()
+    lost_count = items_qs.filter(status=Item.Status.LOST).count()
+
+    context = {
+        "record": record,
+        "total_items": total_items,
+        "available_count": available_count,
+        "loaned_count": loaned_count,
+        "repair_count": repair_count,
+        "lost_count": lost_count,
+    }
+    return render(request, "catalog/record_detail.html", context)
 
 
 @login_required

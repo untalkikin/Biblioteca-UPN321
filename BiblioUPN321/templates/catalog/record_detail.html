@@ -29,11 +29,24 @@
       <dd class="col-sm-9">{% for s in record.subjects.all %}<span class="badge bg-secondary">{{ s.term }}</span> {% empty %}—{% endfor %}</dd>
     </dl>
     <h5 class="mt-4">Ejemplares</h5>
+    {% comment %} Mostrar resumen de existencias por estado (precalculado en la vista) {% endcomment %}
+    <p class="small text-muted">Total ejemplares: <strong>{{ total_items }}</strong> · Disponible: <strong>{{ available_count }}</strong> · Prestado: <strong>{{ loaned_count }}</strong> · En reparación: <strong>{{ repair_count }}</strong> · Perdido: <strong>{{ lost_count }}</strong></p>
+
     <ul class="list-group">
       {% for it in record.items.all %}
         <li class="list-group-item d-flex justify-content-between align-items-center">
-          {{ it.barcode }} · {{ it.location.name }}
-          <span class="badge bg-{{ it.status|yesno:'success,danger,warning,secondary' }}">{{ it.get_status_display }}</span>
+          <div>
+            <div><strong>{{ it.barcode }}</strong> · {{ it.location.name }}</div>
+            <div class="small text-muted">{% if it.acquisition_date %}Adquirido: {{ it.acquisition_date }} · {% endif %}Precio: {% if it.price %}S/ {{ it.price }}{% else %}—{% endif %}</div>
+          </div>
+          <div class="text-end">
+            <div><span class="badge bg-{{ it.status|yesno:'success,danger,warning,secondary' }}">{{ it.get_status_display }}</span></div>
+            {% if it.qr_image %}
+              <div class="mt-2"><img src="{{ it.qr_image.url }}" alt="QR {{ it.barcode }}" style="width:96px;height:96px;object-fit:contain;"/></div>
+            {% else %}
+              <div class="mt-2 small text-muted">Sin QR</div>
+            {% endif %}
+          </div>
         </li>
       {% empty %}
         <li class="list-group-item text-muted">Sin ejemplares</li>

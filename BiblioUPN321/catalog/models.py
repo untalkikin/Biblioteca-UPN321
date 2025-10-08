@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import RegexValidator 
 from django.utils.translation import gettext_lazy as _
+import io
+from django.core.files.base import ContentFile
 
 from .services.lcc import generate_lcc, normalize_lcc, split_lcc, build_call_number, build_sort_key
 
@@ -250,9 +252,61 @@ class Item(TimeStampedModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
     acquisition_date = models.DateField(null=True, blank=True)
     price = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
+    # Código QR del ejemplar (usado para etiquetado físico)
+    qr_image = models.ImageField(upload_to="qrcodes/", null=True, blank=True)
     
     def __str__(self):
         return f"{self.barcode} - {self.record.title}"
+
+    def generate_qr(self, data: str) -> None:
+        """Genera un PNG de código QR a partir de `data` y lo guarda en `qr_image`.
+
+        Usamos la librería `qrcode` para generar la imagen en memoria y
+        luego la asignamos al campo `qr_image` sin hacer save() del modelo
+        para que el workflow de save() del modelo controle la persistencia.
+        """
+        try:
+            # Importar localmente para evitar error de import si la dependencia
+            # no está instalada en el entorno de análisis estático.
+            import qrcode
+
+            qr = qrcode.QRCode(box_size=6, border=2)
+            qr.add_data(data)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+
+            bio = io.BytesIO()
+            img.save(bio, format="PNG")
+            bio.seek(0)
+
+            filename = f"{self.barcode}_qr.png"
+            self.qr_image.save(filename, ContentFile(bio.read()), save=False)
+        except Exception:
+            # No queremos romper el guardado por un fallo en la generación de QR.
+            pass
+
+    def save(self, *args, **kwargs):
+        """Override para generar QR automáticamente tras el primer guardado.
+
+        Se guarda la instancia primero para asegurar que tiene PK y luego,
+        si no existe `qr_image`, se genera y se guarda sólo ese campo.
+        """
+        # Guardar primero la instancia normal
+        super().save(*args, **kwargs)
+
+        # Si no existe imagen QR y hay barcode y record, generarla
+        if not self.qr_image and self.barcode and self.record:
+            payload = f"barcode:{self.barcode}|record:{self.record.pk}|title:{self.record.title}"
+            self.generate_qr(payload)
+            # Guardar sólo el campo qr_image para evitar tocar otros campos
+            try:
+                super().save(update_fields=["qr_image"])
+            except Exception:
+                # En caso de fallo, intentamos un save completo
+                try:
+                    super().save()
+                except Exception:
+                    pass
 
 
 class Book(models.Model):

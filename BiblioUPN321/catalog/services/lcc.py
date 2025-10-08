@@ -14,6 +14,7 @@ KEYWORDS_TO_CLASS: dict[str, str] = {
     "curricular": "LB",
     "docencia": "LB",
     "metodologia de la investigacion educativa": "LB",
+    "metodologia de la investigacion": "LB",
     "evaluacion educativa": "LB",
     "psicopedagogia": "LB",
     "inclusion educativa": "LC",
