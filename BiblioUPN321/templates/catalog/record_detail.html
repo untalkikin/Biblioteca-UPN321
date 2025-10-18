@@ -28,6 +28,11 @@
       <dt class="col-sm-3">Materias</dt>
       <dd class="col-sm-9">{% for s in record.subjects.all %}<span class="badge bg-secondary">{{ s.term }}</span> {% empty %}—{% endfor %}</dd>
     </dl>
+    <h1>{{ record.title }}</h1>
+      <p><b>Código inventario:</b> {{ record.inventory_code }}</p>
+          {% if record.qr_image %}
+        <img src="{{ record.qr_image.url }}" alt="QR {{ record.inventory_code }}" width="200">
+          {% endif %}
     <h5 class="mt-4">Ejemplares</h5>
     {% comment %} Mostrar resumen de existencias por estado (precalculado en la vista) {% endcomment %}
     <p class="small text-muted">Total ejemplares: <strong>{{ total_items }}</strong> · Disponible: <strong>{{ available_count }}</strong> · Prestado: <strong>{{ loaned_count }}</strong> · En reparación: <strong>{{ repair_count }}</strong> · Perdido: <strong>{{ lost_count }}</strong></p>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Scaneo{% endblock %}
+{% block content %}
+
+<!-- templates/inventario/scan.html -->
+<div id="reader" style="width:360px;"></div>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  function onScanSuccess(decodedText) {
+    // Llamas a tu API para marcar "visto en inventario"
+    fetch("/api/inventory/mark-seen/", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken":"{{ csrf_token }}"},
+      body: JSON.stringify({ code: decodedText })
+    }).then(r => r.json()).then(data => {
+      alert("OK: " + data.title);
+    });
+  }
+  const html5QrCode = new Html5Qrcode("reader");
+  Html5Qrcode.getCameras().then(devices => {
+    const backCam = devices.find(d => /back|trás|rear/i.test(d.label))?.id || devices[0].id;
+    html5QrCode.start(backCam, { fps: 10, qrbox: 250 }, onScanSuccess);
+  });
+</script>
+{% endblock %}

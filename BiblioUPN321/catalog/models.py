@@ -1,7 +1,8 @@
+import uuid
 from django.db import models
 from django.core.validators import RegexValidator 
 from django.utils.translation import gettext_lazy as _
-import io
+import io, qrcode
 from django.core.files.base import ContentFile
 
 from .services.lcc import generate_lcc, normalize_lcc, split_lcc, build_call_number, build_sort_key
@@ -141,29 +142,49 @@ class BibliographicRecord(TimeStampedModel):
     # Relaciones
     subjects = models.ManyToManyField(Subject, blank=True)
     cover = models.ImageField(upload_to='covers/', null=True, blank=True)
+    inventory_code = models.CharField(max_length=64, unique=True, blank=True)
+    qr_image = models.ImageField(upload_to="qr/", blank=True, null=True)
     
     class Meta:
-        # Orden por signatura LCC y título como fallback
         ordering = ["lcc_class", "lcc_number", "cutter", "title"]
-        
+        indexes = [
+        models.Index(fields=["lcc_class", "lcc_number", "cutter"]),
+        ]
+
     def __str__(self):
         return self.title
-    
-    
-  # catalog/models.py (dentro de class BibliographicRecord)
+
+    def get_absolute_url(self):
+        return reverse("catalog:record_detail", args=[self.pk])
+
+    # ---------- Lógica QR ----------
+    def get_qr_payload(self) -> str:
+        # Incluye pk + inventory_code => único y estable
+        # Ajusta el dominio/base a tu despliegue real o usa reverse con sitio
+        return f"/catalog/record/{self.pk}/?inv={self.inventory_code}"
+
+    def _generate_qr_contentfile(self) -> ContentFile:
+        data = self.get_qr_payload()
+        img = qrcode.make(data)  # Requiere Pillow instalado
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return ContentFile(buf.getvalue())
+
+    # ---------- Override save ----------
     def save(self, *args, **kwargs):
-        # 0) Preparar texto de materias sin tocar M2M si aún no hay pk
+        # 0) Inventory code único si falta
+        if not self.inventory_code:
+            self.inventory_code = f"UPN-{uuid.uuid4().hex[:8].upper()}"
+
+        # 1) Preparar texto de materias sólo si ya existe pk (M2M requiere pk)
         subjects_text = getattr(self, "_subjects_text", None)
-        # Si el formulario/loader inyecta un texto de materias lo usamos.
-        # Si no, y ya existe pk, leemos las materias desde el M2M (campo 'term').
         if subjects_text is None and self.pk:
             try:
-                # El modelo Subject define el campo como `term`.
                 subjects_text = " ".join(self.subjects.values_list("term", flat=True))
             except Exception:
                 subjects_text = ""
 
-        # 1) Generar / normalizar LCC
+        # 2) Generar/normalizar LCC si hace falta
         if not self.lcc_code:
             generated, source = generate_lcc(self, subjects_text=subjects_text)
             if generated:
@@ -172,40 +193,39 @@ class BibliographicRecord(TimeStampedModel):
         else:
             self.lcc_code = normalize_lcc(self.lcc_code)
 
-        # 2) Derivados (split, call number, sort keys) — sin tocar M2M
+        # 3) Derivados de LCC
         if self.lcc_code:
-            parts = split_lcc(self.lcc_code)
-            self.lcc_class = parts["lcc_class"]
-            self.lcc_number = parts["lcc_number"]
-            self.cutter = self.cutter or parts["cutter"]
-            self.cutter2 = self.cutter2 or parts["cutter2"]
+            parts = split_lcc(self.lcc_code)  # dict con lcc_class, lcc_number, cutter, cutter2, year
+            self.lcc_class = parts.get("lcc_class") or self.lcc_class
+            self.lcc_number = parts.get("lcc_number") or self.lcc_number
+            self.cutter = self.cutter or parts.get("cutter", "")
+            self.cutter2 = self.cutter2 or parts.get("cutter2", "")
 
-            if not self.publish_year and parts["year"]:
+            # Año (si no hay publish_year explícito)
+            if not self.publish_year and parts.get("year"):
                 try:
                     self.publish_year = int(parts["year"])
                 except (TypeError, ValueError):
                     pass
 
+            # Signatura completa
             self.call_number = build_call_number({
                 "lcc_class": self.lcc_class,
                 "lcc_number": self.lcc_number,
                 "cutter": self.cutter,
                 "cutter2": self.cutter2,
-                "year": (self.publish_year and str(self.publish_year)) or parts["year"]
+                "year": (str(self.publish_year) if self.publish_year else parts.get("year")),
             })
 
-            sort_key, number_sort = build_sort_key(
-                lcc_class=self.lcc_class,
-                lcc_number=self.lcc_number,
-                cutter=self.cutter,
-                cutter2=self.cutter2,
-                year=(self.publish_year and str(self.publish_year)) or parts["year"]
-            )
-            self.lcc_sort_key = sort_key
-            self.lcc_number_sort = number_sort
-
+        # 4) Primer guardado: asegura pk antes de generar QR
+        new_record = self.pk is None
         super().save(*args, **kwargs)
 
+        # 5) Generar QR si no existe
+        if not self.qr_image:
+            png = self._generate_qr_contentfile()
+            self.qr_image.save(f"rec_{self.pk}.png", png, save=False)
+            super().save(update_fields=["qr_image"])
     
 
 class RecordContributor(models.Model):
